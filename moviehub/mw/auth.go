@@ -9,49 +9,57 @@ import (
     "moviehub/auth"
 )
 
-type Who struct {
-    ID   int64
-    Role string
+type ctxKey int
+
+const (
+    memberIDKey ctxKey = iota
+    roleKey
+)
+
+// MemberID คืนเลขสมาชิกจากตั๋วที่ตรวจแล้ว ok = false แปลว่าคำขอนี้ไม่ได้ผ่าน RequireLogin
+func MemberID(ctx context.Context) (int64, bool) {
+    id, ok := ctx.Value(memberIDKey).(int64)
+    return id, ok
 }
 
-type ctxKey struct{}
-
-func WhoFrom(ctx context.Context) Who {
-    w, _ := ctx.Value(ctxKey{}).(Who)
-    return w
+// Role คืนบทบาทจากตั๋ว ("member" หรือ "admin") ว่างถ้ายังไม่ได้ login
+func Role(ctx context.Context) string {
+    role, _ := ctx.Value(roleKey).(string)
+    return role
 }
 
-func deny(w http.ResponseWriter, status int, code, msg string) {
+func fail(w http.ResponseWriter, status int, code, message string) {
     w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(status)
     json.NewEncoder(w).Encode(map[string]any{
-        "error": map[string]string{"code": code, "message": msg},
+        "error": map[string]string{"code": code, "message": message},
     })
 }
 
-// RequireLogin คือประตูตรวจตั๋ว ไม่มีตั๋วหรือตั๋วใช้ไม่ได้ ตอบ 401
+// RequireLogin คือพนักงานตรวจตั๋ว: ต้องมี Authorization: Bearer <token> ที่ตรวจผ่าน
 func RequireLogin(iss *auth.Issuer, next http.HandlerFunc) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         header := r.Header.Get("Authorization")
-        token, found := strings.CutPrefix(header, "Bearer ")
-        if !found || token == "" {
-            deny(w, http.StatusUnauthorized, "LOGIN_REQUIRED", "กรุณาเข้าสู่ระบบก่อน")
+        if !strings.HasPrefix(header, "Bearer ") {
+            fail(w, http.StatusUnauthorized, "NO_TOKEN", "กรุณาเข้าสู่ระบบก่อน")
             return
         }
-        id, role, err := iss.Parse(token)
+        id, role, err := iss.Parse(strings.TrimPrefix(header, "Bearer "))
         if err != nil {
-            deny(w, http.StatusUnauthorized, "TOKEN_INVALID", "ตั๋วใช้ไม่ได้หรือหมดอายุ กรุณาเข้าสู่ระบบใหม่")
+            fail(w, http.StatusUnauthorized, "BAD_TOKEN", "ตั๋วไม่ถูกต้องหรือหมดอายุ กรุณาเข้าสู่ระบบใหม่")
             return
         }
-        ctx := context.WithValue(r.Context(), ctxKey{}, Who{ID: id, Role: role})
+        ctx := context.WithValue(r.Context(), memberIDKey, id)
+        ctx = context.WithValue(ctx, roleKey, role)
         next(w, r.WithContext(ctx))
     }
 }
-// RequireRole ใช้ต่อจาก RequireLogin บทบาทไม่ตรง ตอบ 403
+
+// RequireRole ใช้ต่อจาก RequireLogin: ตั๋วถูกต้องแต่บทบาทไม่ตรง ตอบ 403
 func RequireRole(role string, next http.HandlerFunc) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        if WhoFrom(r.Context()).Role != role {
-            deny(w, http.StatusForbidden, "FORBIDDEN", "บัญชีนี้ไม่มีสิทธิ์ทำรายการนี้")
+        if Role(r.Context()) != role {
+            fail(w, http.StatusForbidden, "FORBIDDEN", "ต้องเป็น "+role+" เท่านั้น")
             return
         }
         next(w, r)
