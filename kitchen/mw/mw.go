@@ -35,15 +35,27 @@ func Recovery(next http.Handler) http.Handler {
     })
 }
 
+// allowedOrigins คือรายชื่อเว็บ (frontend) ที่อนุญาตให้เรียก API นี้ได้
+var allowedOrigins = map[string]bool{
+    "http://localhost:5173":                 true, // Vite
+    "http://localhost:3000":                 true, // MovieHub (localhost)
+    "http://127.0.0.1:3000":                 true, // MovieHub (127.0.0.1)
+    "https://moviehub-650710728.vercel.app": true, // MovieHub บน Vercel
+}
+
 func CORS(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+        origin := r.Header.Get("Origin")
+        if allowedOrigins[origin] {
+            w.Header().Set("Access-Control-Allow-Origin", origin)
+            w.Header().Set("Vary", "Origin")
+        }
         w.Header().Set("Access-Control-Allow-Methods",
             "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-        w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
         if r.Method == http.MethodOptions {
             w.WriteHeader(http.StatusNoContent)
-            return                    // ใบสั่งถามทาง จบตรงนี้ ไม่ต้องเข้าครัว
+            return // ใบสั่งถามทาง จบตรงนี้ ไม่ต้องเข้าครัว
         }
         next.ServeHTTP(w, r)
     })
