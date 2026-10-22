@@ -12,3 +12,5 @@ func HashPassword(plain string) (string, error) {
 func CheckPassword(hash, plain string) bool {
     return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain)) == nil
 }
+
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYWRtaW4iLCJzdWIiOiIzIiwiZXhwIjoxNzkyNTg4NTcxLCJpYXQiOjE3OTI1ODQ5NzF9.piLWnzP8gI4TvbFg-ZBj2R5LweJkpdCvcc3IMML3byY
