@@ -48,6 +48,12 @@ func main() {
 	mux.HandleFunc("GET /api/movies/{id}/reviews", h.ListReviews)
 	mux.HandleFunc("POST /api/movies/{id}/reviews", login(h.AddReview))
 
+	mux.HandleFunc("PUT /api/movies/{id}/vote", login(h.PutVote))
+
+	mux.HandleFunc("GET /api/me/wishlist", login(h.GetWishlist))
+	mux.HandleFunc("PUT /api/me/wishlist/{id}", login(h.AddWishlist))
+	mux.HandleFunc("DELETE /api/me/wishlist/{id}", login(h.RemoveWishlist))
+
 	// หลังบ้าน: ทุกเส้นทางใต้ /api/admin ผ่าน admin(...) ไม่มีข้อยกเว้น
 	mux.HandleFunc("GET /api/admin/stats", admin(h.AdminStats))
 	mux.HandleFunc("GET /api/admin/members", admin(h.AdminMembers))

@@ -46,3 +46,91 @@ func (h *Handler) AddReview(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"id": rv.ID, "text": rv.Text, "createdAt": rv.CreatedAt})
 }
+
+func (h *Handler) PutVote(w http.ResponseWriter, r *http.Request) {
+	who := mw.WhoFrom(r.Context())
+
+	movieID, ok := pathID(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "BAD_ID", "เลขหนังต้องเป็นตัวเลข")
+		return
+	}
+
+	var req struct {
+		Score int `json:"score"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_JSON", "ข้อมูลคะแนนไม่ถูกต้อง")
+		return
+	}
+	if req.Score < 1 || req.Score > 10 {
+		writeError(w, http.StatusBadRequest, "BAD_SCORE", "คะแนนต้องอยู่ระหว่าง 1 ถึง 10")
+		return
+	}
+
+	err := h.Store.PutVote(r.Context(), who.ID, movieID, int16(req.Score))
+	if errors.Is(err, store.ErrNoMovie) {
+		writeError(w, http.StatusNotFound, "MOVIE_NOT_FOUND", "ไม่พบหนังเรื่องนี้")
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"movieId": movieID,
+		"score":   req.Score,
+	})
+}
+
+func (h *Handler) GetWishlist(w http.ResponseWriter, r *http.Request) {
+	who := mw.WhoFrom(r.Context())
+
+	items, err := h.Store.GetWishlist(r.Context(), who.ID)
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (h *Handler) AddWishlist(w http.ResponseWriter, r *http.Request) {
+	who := mw.WhoFrom(r.Context())
+
+	movieID, ok := pathID(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "BAD_ID", "เลขหนังต้องเป็นตัวเลข")
+		return
+	}
+
+	err := h.Store.AddWishlist(r.Context(), who.ID, movieID)
+	if errors.Is(err, store.ErrNoMovie) {
+		writeError(w, http.StatusNotFound, "MOVIE_NOT_FOUND", "ไม่พบหนังเรื่องนี้")
+		return
+	}
+	if err != nil {
+		internal(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) RemoveWishlist(w http.ResponseWriter, r *http.Request) {
+	who := mw.WhoFrom(r.Context())
+
+	movieID, ok := pathID(r, "id")
+	if !ok {
+		writeError(w, http.StatusBadRequest, "BAD_ID", "เลขหนังต้องเป็นตัวเลข")
+		return
+	}
+
+	if err := h.Store.RemoveWishlist(r.Context(), who.ID, movieID); err != nil {
+		internal(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
